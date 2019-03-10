@@ -127,6 +127,7 @@
     - 重写**hashCode()  equals()**
 
   - 然后,编写一个名为**Handler类**
+
     - 定义 **Class<?> controllerClass  Method actionMethod**
 
   - 最后,编写**ControllerHelper类**
@@ -377,3 +378,26 @@
 #### 定义切面注解
 
 - 在框架中添加**Aspect的注解**
+
+  ```java
+  @Target(ElementType.TYPE)//设置该注解只能应用于类上
+  @Retention(RetentionPolicy.RUNTIME)
+  public @interface Aspect {
+      /**
+       * 注解类
+       */
+      Class<? extends Annotation> value();
+  }
+  ```
+
+#### 搭建代理框架
+
+- 添加**Proxy**的接口
+  - 执行链式代理 **Object doProxy(ProxyChain proxyChain) throws Throwable**
+
+- 添加**ProxyChain类**
+  - 定义了一系列成员变量包括 **targetClass(目标类),targetObject(目标对象),targetMethod(目标方法),methodProxy(方法代理),methodParams(方法参数)**此外还包括了**proxyList(代理列表),proxyIndex(代理索引)**.这些成员变量在构造器中进行初始化,并提供几个重要的获值方法.
+  - **doProxyChain 方法**,在该方法中,我们通过**proxyIndex**来充当代理对象的计数器,若尚未达到ProxyList的上限,则从**proxyList中取出相应的Proxy对象**,并**调用doProxy方法**.在Proxy接口的实现中提供相应的**横切逻辑**,并调用**doProxyChain方法**,随后将**再次调用当前ProxyChain对象的doProxyChain方法**,直到proxyIndex达到proxyList的**上限为止**,最后调用**methodProxy的invokeSuper方法**,执行目标对象的逻辑;
+
+- 写一个提供一个**创建代理对象的方法**,输入**一个目标类**和**一组Proxy接口实现**,输出一个代理对象,将它命名为**ProxyManager**,让它来**创建所有的代理对象**
+  - 
