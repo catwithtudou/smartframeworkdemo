@@ -1,3 +1,6 @@
+# smartframeworkdemo
+# smartframeworkdemo
+
 ### 开发框架
 
 #### 创建框架项目
@@ -378,6 +381,7 @@
 #### 定义切面注解
 
 - 在框架中添加**Aspect的注解**
+<<<<<<< HEAD:README.md
 
   ```java
   @Target(ElementType.TYPE)//设置该注解只能应用于类上
@@ -417,6 +421,7 @@
 
 - 为了**加载AOP框架**,我们需要编写一个名为**AopHelper的类**,然后将其添加到**HelperLoader类**中,在AopHelper类中需要**获取所有的目标类及其被拦截的切面类实例**,并通过ProxyManager#createProxy方法来**创建代理对象**,最后将其放入**Bean Map**中
 - 首先需要在BeanHelper类中添加一个**setBean**方法,用于将**Bean实例放入Bean Map**中
+
   - **static void setBean(Class<?> cls,Object obj)**
 
 - 然后需要扩展AspectProxy抽象类的**所有具体类**,还需要获取带有**Aspect注解的所有类**
@@ -505,3 +510,5 @@
   **获取代理类及目标类集合的映射关系,进一步获取目标类与代理对象列表的映射关系,进而遍历这个映射关系,从中获取目标类与代理对象列表,调用ProxyManager.createProxy方法获取代理对象,调用BeanHelper.setBean方法,将该代理对象重新放入Bean Map中**
 
 - 最后将AopHelper添加到HelperLoader中进行初始化
+=======
+>>>>>>> 1c31d9a6d5b907557ee85dd997753542c71f2dbb:README.md
