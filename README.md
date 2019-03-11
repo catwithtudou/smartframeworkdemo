@@ -400,4 +400,108 @@
   - **doProxyChain 方法**,在该方法中,我们通过**proxyIndex**来充当代理对象的计数器,若尚未达到ProxyList的上限,则从**proxyList中取出相应的Proxy对象**,并**调用doProxy方法**.在Proxy接口的实现中提供相应的**横切逻辑**,并调用**doProxyChain方法**,随后将**再次调用当前ProxyChain对象的doProxyChain方法**,直到proxyIndex达到proxyList的**上限为止**,最后调用**methodProxy的invokeSuper方法**,执行目标对象的逻辑;
 
 - 写一个提供一个**创建代理对象的方法**,输入**一个目标类**和**一组Proxy接口实现**,输出一个代理对象,将它命名为**ProxyManager**,让它来**创建所有的代理对象**
-  - 
+  - **static <T> T createProxy(final Class<?> targetClass,final List<Proxy> proxyList)**   通过Enhance#create方法来创建代理对象,将intercept的参数传入ProxyChain的构造器即可
+
+- 写一个抽象类,让它提供一个模板方法,并在该抽象类的具体实现中扩展相应的抽象方法
+
+  - **AspectProxy类 implements Proxy**
+    - **Object doProxy(ProxyChain proxyChain) throws Throwable**  从proxyChain参数中获取了目标类、目标方法与方法参数,随后通过try catch finally代码块来实现调用框架,从框架中抽象出一系列的"钩子方法"
+    - **void begin() ; boolean intercept(Class<?> cls,Method method,Object[] params) throws Throwable**
+    - **void before(Class<?> cls,Method method,Object[] params) throws Throwable**
+    - **void after(Class<?> cls,Method method,Object[] params) throws Throwable**
+    - **void error(Class<?> cls,Method method,Object[] params) throws Throwable; void end()**
+
+  - 抽象方法可在AspectProxy的子类中有选择性地进行实现
+
+#### 加载AOP框架
+
+- 为了**加载AOP框架**,我们需要编写一个名为**AopHelper的类**,然后将其添加到**HelperLoader类**中,在AopHelper类中需要**获取所有的目标类及其被拦截的切面类实例**,并通过ProxyManager#createProxy方法来**创建代理对象**,最后将其放入**Bean Map**中
+- 首先需要在BeanHelper类中添加一个**setBean**方法,用于将**Bean实例放入Bean Map**中
+  - **static void setBean(Class<?> cls,Object obj)**
+
+- 然后需要扩展AspectProxy抽象类的**所有具体类**,还需要获取带有**Aspect注解的所有类**
+
+  - 需要在**ClassHelper**添加两个方法
+    - **static Set<Class<?>> getClassSetBySuper(Class<?> superClass)**获取应用包名下某父类(或接口)的所有子类(或实现类)
+    - **static Set<Class<?>> getClassSetByAnnotation(Class<? extends Annotation> annotationClass)**   获取应用包名下带有某注解的所有类
+    - 由以上工具方法后可以在AopHelper类中编写一个带有Aspect注解的所有类
+
+  - 在AopHelper中封装一个方法
+
+    ```java
+        private static Set<Class<?>> createTargetClassSet(Aspect aspect)throws Exception{
+            Set<Class<?>> targetClassSet=new HashSet<>();
+            Class<? extends Annotation> annotation=aspect.value();
+            if(annotation!=null&&!annotation.equals(Aspect.class)){
+                targetClassSet.addAll(ClassHelper.getClassSetByAnnotation(annotation));
+            }
+            return targetClassSet;
+    ```
+
+  获取Aspect注解中设置的注解类,若不是则调用ClassHelper#getClassSetByAnnotation方法获取相关类,并把这些类放入目标类集合,最终返回这个集合
+
+- 紧接着我们需要获取代理类及其目标类集合之间的映射关系,一个代理类可对应一个或多个目标类,这里所有的代理类指的是切面类
+
+  ```java
+  private static Map<Class<?>,Set<Class<?>>> createProxyMap() throws Exception{
+      Map<Class<?>,Set<Class<?>>> proxyMap=new HashMap<> ();
+      Set<Class<?>> proxyClassSet=ClassHelper.getClassSetBySuper(AspectProxy.class);
+      for (Class<?> proxyClass:proxyClassSet){
+          if(proxyClass.isAnnotationPresent(Aspect.class)){
+              Aspect aspect=proxyClass.getAnnotation(Aspect.class);
+              Set<Class<?>> targetClassSet=createTargetClassSet(aspect);
+              proxyMap.put(proxyClass,targetClassSet);
+          }
+      }
+      return proxyMap;
+  }
+  ```
+
+  代理类需要扩展AspectProxy抽象类,还需要带有Aspect注解,只有满足这两条件,才能根据Aspect注解中所定义的注解属性去获取该注解所对应的目标类集合,然后才能建立代理类与目标类集合之间的映射关系,最终返回这个映射关系
+
+- 获取了映射关系就能根据这个关系分析出目标类与代理对象列表之间的映射关系
+
+  ```java
+      private static Map<Class<?>, List<Proxy>> createTargetMap(Map<Class<?>,Set<Class<?>>> proxyMap)throws Exception{
+          Map<Class<?>, List<Proxy>>  targetMap=new HashMap<>();
+          for(Map.Entry < Class < ? > , Set < Class < ? > > >  proxyEntry : proxyMap.entrySet()){
+              Class<?> proxyClass =proxyEntry.getKey();
+              Set<Class<?>> targetClassSet=proxyEntry.getValue();
+              for(Class<?> targetClass:targetClassSet){
+                  Proxy proxy=(Proxy) proxyClass.newInstance();
+                  if(targetMap.containsKey(targetClass)){
+                      targetMap.get(targetClass).add(proxy);
+                  }else{
+                      List<Proxy> proxyList=new ArrayList<> ();
+                      proxyList.add(proxy);
+                      targetMap.put(targetClass,proxyList);
+                  }
+              }
+          }
+          return targetMap;
+      }	
+      
+  ```
+
+- 最后在AopHelper中通过一个静态块来初始化整个AOP框架
+
+  ```java
+      static {
+          try{
+              Map<Class<?>,Set<Class<?>>> proxyMap=createProxyMap();
+              Map<Class<?>,List<Proxy>>  targetMap=createTargetMap(proxyMap);
+              for(Map.Entry<Class<?>,List<Proxy>> targetEntry: targetMap.entrySet()){
+                  Class<?> targetClass=targetEntry.getKey();
+                  List<Proxy> proxyList=targetEntry.getValue();
+                  Object proxy= ProxyManager.createProxy(targetClass,proxyList);
+                  BeanHelper.setBean(targetClass,proxy);
+              }
+          }catch (Exception e){
+              LOGGER.error("aop failure",e);
+          }
+      }
+  ```
+
+  **获取代理类及目标类集合的映射关系,进一步获取目标类与代理对象列表的映射关系,进而遍历这个映射关系,从中获取目标类与代理对象列表,调用ProxyManager.createProxy方法获取代理对象,调用BeanHelper.setBean方法,将该代理对象重新放入Bean Map中**
+
+- 最后将AopHelper添加到HelperLoader中进行初始化
